@@ -4,13 +4,12 @@ import ffmpeg
 import glob
 import sys
 import re
-import os  # Added for file handling
+import os
 
 
 def chunker(input_filename, chunk_limit):
     file_count = 1
     current_chunk_size = 0
-    # Added encoding="utf-8" for safety
     output_file = open(f"output_chunk_{file_count}.txt", "w", encoding="utf-8")
 
     with open(input_filename, "r", encoding="utf-8") as in_file:
@@ -59,7 +58,6 @@ async def process_text_files():
     files = file_parser("text_files")
     total_files = len(files)
 
-    # NOTE: I removed [:1] so it processes ALL files, not just the first one.
     for i, filename in enumerate(files, start=1):
         with open(filename, "r", encoding="utf-8") as file:
             content = file.read()
@@ -80,7 +78,6 @@ def concat_mp3s_ffmpeg(output_file_path):
     for file in mp3_files:
         input_args.append(ffmpeg.input(file))
 
-    # Using overwrite_output=True allows re-running without error
     concatenated = ffmpeg.concat(*input_args, v=0, a=1)
     ffmpeg.output(concatenated, output_file_path).run(overwrite_output=True)
     print(f"Successfully combined files into: {output_file_path}")
@@ -106,25 +103,14 @@ def cleanup_temp_files():
 
 
 def format_output_filename(original_filename):
-    """
-    Converts 'Legacy - Kerr, James.txt' -> 'Legacy_Kerr_James.mp3'
-    """
-    # 1. Remove extension (.txt)
     base_name = os.path.splitext(original_filename)[0]
-
-    # 2. Replace non-alphanumeric chars (spaces, commas, dashes) with underscores
     clean_name = re.sub(r"[^\w\d]", "_", base_name)
-
-    # 3. Collapse multiple underscores into one (e.g. "Legacy___Kerr" -> "Legacy_Kerr")
     clean_name = re.sub(r"_+", "_", clean_name)
-
-    # 4. Strip leading/trailing underscores
     clean_name = clean_name.strip("_")
 
     return f"{clean_name}.mp3"
 
 
-# --- Main Execution Flow ---
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python3 tts.py <filename.txt>")
