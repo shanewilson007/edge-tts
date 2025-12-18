@@ -5,6 +5,26 @@ import glob
 import sys
 import re
 import os
+import ebooklib
+from ebooklib import epub
+from bs4 import BeautifulSoup
+
+
+def epub_to_text(epub_path, output_txt_path):
+    """
+    Reads an epub file, extracts text from documents, and writes to a single text file.
+    """
+    print("Converting EPUB to text...")
+    book = epub.read_epub(epub_path)
+
+    with open(output_txt_path, "w", encoding="utf-8") as out_file:
+        for doc in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
+            html_content = doc.content.decode("utf-8")
+            soup = BeautifulSoup(html_content, "html.parser")
+
+            for string in soup.stripped_strings:
+                out_file.write(string + "\n")
+    print("EPUB conversion complete.")
 
 
 def chunker(input_filename, chunk_limit):
@@ -84,20 +104,15 @@ def concat_mp3s_ffmpeg(output_file_path):
 
 
 def cleanup_temp_files():
-    """Removes temporary chunk text files and audio segments."""
-    # Remove text chunks
-    for f in glob.glob("output_chunk_*.txt"):
-        try:
-            os.remove(f)
-        except OSError as e:
-            print(f"Error deleting {f}: {e}")
+    """Removes temporary chunk text files, audio segments, and temp converted epub."""
+    patterns = ["output_chunk_*.txt", "output_audio_*.mp3", "temp_converted_epub.txt"]
 
-    # Remove audio chunks
-    for f in glob.glob("output_audio_*.mp3"):
-        try:
-            os.remove(f)
-        except OSError as e:
-            print(f"Error deleting {f}: {e}")
+    for pattern in patterns:
+        for f in glob.glob(pattern):
+            try:
+                os.remove(f)
+            except OSError as e:
+                print(f"Error deleting {f}: {e}")
 
     print("Cleanup complete.")
 
@@ -113,24 +128,32 @@ def format_output_filename(original_filename):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 tts.py <filename.txt>")
+        print("Usage: python3 tts.py <filename.txt or filename.epub>")
         sys.exit(1)
 
-    input_filename = sys.argv[1]
+    original_input_filename = sys.argv[1]
+    processing_filename = original_input_filename
 
-    print(f"Processing: {input_filename}")
+    print(f"Processing: {original_input_filename}")
 
-    # 1. Create Chunks
-    chunker(input_filename, 4096)
+    # If it is an epub, we convert it to a temp text file first.
+    if original_input_filename.lower().endswith(".epub"):
+        temp_text_file = "temp_converted_epub.txt"
+        epub_to_text(original_input_filename, temp_text_file)
+        processing_filename = temp_text_file
 
-    # 2. Create Audio Segments
+    # --- Step 1: Create Chunks ---
+    chunker(processing_filename, 4096)
+
+    # --- Step 2: Create Audio Segments ---
     asyncio.run(process_text_files())
 
-    # 3. Determine Final Filename
-    final_output_name = format_output_filename(input_filename)
+    # --- Step 3: Determine Final Filename ---
+    # We use the ORIGINAL filename for naming the MP3, not the temp file name
+    final_output_name = format_output_filename(original_input_filename)
 
-    # 4. Concatenate
+    # --- Step 4: Concatenate ---
     concat_mp3s_ffmpeg(final_output_name)
 
-    # 5. Cleanup
+    # --- Step 5: Cleanup ---
     cleanup_temp_files()
